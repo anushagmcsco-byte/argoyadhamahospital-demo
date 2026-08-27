@@ -1,0 +1,6 @@
+{
+  "name": "Arogyadhama Heart & Super Specialty Hospital",
+  "description": "Official website for Arogyadhama Heart & Super Specialty Hospital in Vijayapura, Karnataka. Comprehensive 24/7 cardiac, neurology, orthopaedics, nephrology, emergency, diagnostic, and super specialty healthcare services.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

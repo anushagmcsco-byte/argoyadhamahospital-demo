@@ -1,0 +1,85 @@
+{
+  "entities": {
+    "appointments": {
+      "title": "Hospital Appointments",
+      "description": "Patient outpatient consultation bookings",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "bookingRef": { "type": "string" },
+        "patientName": { "type": "string" },
+        "patientPhone": { "type": "string" },
+        "patientEmail": { "type": "string" },
+        "patientAge": { "type": "number" },
+        "gender": { "type": "string" },
+        "departmentId": { "type": "string" },
+        "departmentName": { "type": "string" },
+        "doctorId": { "type": "string" },
+        "doctorName": { "type": "string" },
+        "appointmentDate": { "type": "string" },
+        "preferredSlot": { "type": "string" },
+        "insuranceType": { "type": "string" },
+        "reason": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "confirmed", "completed", "cancelled"] },
+        "adminNotes": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["bookingRef", "patientName", "patientPhone", "departmentName", "appointmentDate", "status", "createdAt"]
+    },
+    "blogPosts": {
+      "title": "Health Blog Posts",
+      "description": "Clinical health articles and medical tips published by hospital specialists",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "slug": { "type": "string" },
+        "title": { "type": "string" },
+        "excerpt": { "type": "string" },
+        "content": { "type": "string" },
+        "category": { "type": "string" },
+        "authorName": { "type": "string" },
+        "authorDesignation": { "type": "string" },
+        "authorImage": { "type": "string" },
+        "image": { "type": "string" },
+        "readTime": { "type": "string" },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "isPublished": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["slug", "title", "excerpt", "content", "category", "authorName", "createdAt"]
+    },
+    "admins": {
+      "title": "Hospital Administrators",
+      "description": "Authorized staff credentials and roles",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "superadmin", "receptionist", "doctor"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["email", "role"]
+    }
+  },
+  "securityRules": {
+    "appointments": {
+      "read": "true",
+      "create": "true",
+      "update": "true",
+      "delete": "true"
+    },
+    "blogPosts": {
+      "read": "true",
+      "create": "true",
+      "update": "true",
+      "delete": "true"
+    },
+    "admins": {
+      "read": "true",
+      "write": "true"
+    }
+  }
+}

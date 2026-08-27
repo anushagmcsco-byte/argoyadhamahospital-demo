@@ -112,7 +112,8 @@ export const DoctorsPage: React.FC = () => {
                       <img
                         src={doc.image}
                         alt={doc.name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        referrerPolicy="no-referrer"
+                        className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-300"
                       />
                       <div className="absolute top-3 left-3 bg-blue-900/90 text-white text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-md backdrop-blur-sm shadow">
                         {doc.departmentName}

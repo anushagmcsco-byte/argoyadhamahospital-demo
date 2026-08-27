@@ -1,4 +1,5 @@
 import { Specialty, Doctor, Facility, HealthPackage, InsurancePartner, BlogPost, Testimonial, FAQItem } from '../types';
+import { DR_SHAILESH_KANNUR_IMAGE } from './doctorImages';
 
 export const HOSPITAL_INFO = {
   name: 'Arogyadhama Heart & Super Specialty Hospital',
@@ -308,13 +309,15 @@ export const SPECIALTIES: Specialty[] = [
     slug: 'general-surgery',
     category: 'surgical',
     iconName: 'Scissors',
-    shortDescription: 'Minimally invasive keyhole surgeries, laser proctology (piles/fissure/fistula), thyroid, breast, and abdominal emergencies.',
-    fullDescription: 'Equipped with cutting-edge 4K laparoscopic towers and diode laser technology, our surgical department offers painless day-care procedures, rapid healing, and minimal scarring.',
+    shortDescription: 'Minimally invasive keyhole surgeries, surgical oncology, laser proctology (piles/fissure/fistula), thyroid, breast, and abdominal emergencies.',
+    fullDescription: 'Equipped with cutting-edge 4K laparoscopic towers, advanced surgical oncology capabilities, and diode laser technology, our surgical department offers painless day-care procedures, oncological tumor resections, rapid healing, and minimal scarring with exceptional patient safety.',
     heroImage: 'https://images.unsplash.com/photo-1579684385127-1ef15d508118?auto=format&fit=crop&w=1200&q=80',
+    headDoctorId: 'dr-shailesh-kannur',
     keyProcedures: [
+      'Surgical Oncology (Tumor & Cancer Resections)',
       'Laparoscopic Inguinal, Umbilical & Incisional Hernia Repair (TEP/TAPP)',
       'Laser Treatment for Piles (Hemorrhoids), Anal Fissures & Fistula',
-      'Laparoscopic Cholecystectomy (Gallbladder)',
+      'Laparoscopic Cholecystectomy (Gallbladder Stones)',
       'Laparoscopic Appendectomy',
       'Thyroidectomy & Parotid Gland Surgeries',
       'Excision of Cysts, Lipomas & Diabetic Foot Ulcer Debridement',
@@ -323,9 +326,11 @@ export const SPECIALTIES: Specialty[] = [
     equipmentAndTech: [
       'Karl Storz 4K Ultra-HD Laparoscopy System',
       'Diode Laser for Proctology & Varicose Veins',
-      'Harmonic Scalpel & Ultrasonic Vessel Sealer'
+      'Harmonic Scalpel & Ultrasonic Vessel Sealer',
+      'Laminar Air Flow Cleanroom Modular Operation Theatres'
     ],
     conditionsTreated: [
+      'Surgical Oncology & Gastrointestinal / Soft Tissue Tumors',
       'Abdominal Hernias (Inguinal, Umbilical, Incisional)',
       'Piles, Fissure-in-Ano, Fistula & Pilonidal Sinus',
       'Gallbladder Stones & Acute Cholecystitis',
@@ -333,6 +338,10 @@ export const SPECIALTIES: Specialty[] = [
       'Thyroid Swellings & Breast Lumps'
     ],
     faqs: [
+      {
+        question: 'What are the benefits of laparoscopic keyhole surgery?',
+        answer: 'Laparoscopic surgery involves small incisions of less than 1 cm, which minimizes blood loss, reduces postoperative pain, decreases infection risk, and allows patients to resume normal activities within days.'
+      },
       {
         question: 'What are the benefits of laser piles treatment?',
         answer: 'Laser treatment is minimally invasive, virtually bloodless, requires minimal hospital stay (often discharged within 24 hours), and allows fast return to normal routine.'
@@ -643,6 +652,35 @@ export const DOCTORS: Doctor[] = [
     languages: ['Kannada', 'English', 'Hindi'],
     rating: 4.9,
     reviewCount: 410
+  },
+  {
+    id: 'dr-shailesh-kannur',
+    name: 'Dr. Shailesh Kannur',
+    slug: 'dr-shailesh-kannur',
+    qualifications: 'MS (General Surgery), Fellowship in Oncosurgery',
+    designation: 'Senior Consultant General, Laparoscopic & Onco Surgeon',
+    departmentId: 'general-surgery',
+    departmentName: 'General & Laparoscopic Surgery',
+    experienceYears: 14,
+    opdTimings: '10:00 AM - 02:00 PM & 05:00 PM - 08:00 PM (Mon-Sat)',
+    availableDays: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+    bio: 'Experienced general surgeon specializing in surgical oncology and advanced procedures. Skilled in managing complex surgical cases with a strong focus on patient safety and recovery.',
+    specialInterests: [
+      'Surgical Oncology & Tumor Excision Surgeries',
+      'Advanced Laparoscopic & Keyhole Procedures',
+      'Laparoscopic Hernia Repair (TEP/TAPP) & Cholecystectomy',
+      'Laser Proctology for Piles, Fissure & Fistula',
+      'Complex Gastrointestinal & Abdominal Emergencies'
+    ],
+    achievements: [
+      'Fellowship in Surgical Oncology (Oncosurgery)',
+      'Extensive clinical experience in complex oncological and advanced laparoscopic resections',
+      'Specialized in patient safety protocols and fast-track postoperative recovery'
+    ],
+    image: DR_SHAILESH_KANNUR_IMAGE,
+    languages: ['Kannada', 'English', 'Hindi', 'Marathi'],
+    rating: 4.9,
+    reviewCount: 280
   },
   {
     id: 'dr-santosh-kulkarni',

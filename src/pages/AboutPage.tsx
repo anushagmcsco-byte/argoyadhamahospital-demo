@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigation } from '../context/NavigationContext';
 import { HOSPITAL_INFO } from '../data/hospitalData';
+import { HospitalBuildingPhoto } from '../components/HospitalBuildingPhoto';
 import { 
   Heart, 
   ShieldCheck, 
@@ -88,20 +89,16 @@ export const AboutPage: React.FC = () => {
             </div>
 
             <div className="lg:col-span-5">
-              <div className="relative rounded-3xl overflow-hidden shadow-2xl border-4 border-slate-100">
-                <img
-                  src="https://images.unsplash.com/photo-1586773860418-d37222d8fce3?auto=format&fit=crop&w=800&q=80"
-                  alt="Arogyadhama Hospital Infrastructure"
-                  className="w-full h-80 object-cover"
-                />
+              <div className="relative rounded-3xl overflow-hidden shadow-2xl border-4 border-slate-100 bg-slate-900">
+                <HospitalBuildingPhoto className="w-full h-80" overlay={false} />
                 <div className="p-6 bg-slate-900 text-white">
                   <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-rose-600 rounded-xl flex items-center justify-center">
+                    <div className="w-10 h-10 bg-[#EF233C] rounded-xl flex items-center justify-center">
                       <Heart className="w-5 h-5 text-white" />
                     </div>
                     <div>
                       <h4 className="text-sm font-bold">1,20,000+ Lives Touched</h4>
-                      <p className="text-xs text-slate-400">Serving Vijayapura, Bagalkot, Belgaum & surrounding rural taluks.</p>
+                      <p className="text-xs text-slate-400">Serving Vijayapura, Bagalkot, Belgaum & surrounding taluks on Dargah Jail Road.</p>
                     </div>
                   </div>
                 </div>

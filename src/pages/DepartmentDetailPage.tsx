@@ -188,7 +188,8 @@ export const DepartmentDetailPage: React.FC<Props> = ({ slug }) => {
                           <img
                             src={doc.image}
                             alt={doc.name}
-                            className="w-16 h-16 rounded-xl object-cover border border-slate-300 flex-shrink-0"
+                            referrerPolicy="no-referrer"
+                            className="w-16 h-16 rounded-xl object-cover object-top border border-slate-300 flex-shrink-0"
                           />
                           <div>
                             <h3 className="text-sm font-bold text-slate-900">{doc.name}</h3>

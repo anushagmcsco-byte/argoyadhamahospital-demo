@@ -61,7 +61,8 @@ export const DoctorDetailPage: React.FC<Props> = ({ slug }) => {
               <img
                 src={doctor.image}
                 alt={doctor.name}
-                className="w-36 h-36 sm:w-44 sm:h-44 rounded-2xl object-cover border border-slate-200 flex-shrink-0 shadow"
+                referrerPolicy="no-referrer"
+                className="w-36 h-36 sm:w-44 sm:h-44 rounded-2xl object-cover object-top border border-slate-200 flex-shrink-0 shadow"
               />
               <div className="space-y-2.5 flex-1">
                 <div className="flex items-center space-x-2">

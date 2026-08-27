@@ -11,9 +11,14 @@ import {
   createBlogPost, 
   updateBlogPost, 
   deleteBlogPost,
-  seedInitialBlogs 
+  seedInitialBlogs,
+  subscribeToGalleryItems,
+  createGalleryItem,
+  updateGalleryItem,
+  deleteGalleryItem,
+  seedInitialGallery
 } from '../services/dbService';
-import { StoredAppointment, StoredBlogPost } from '../types';
+import { StoredAppointment, StoredBlogPost, StoredGalleryItem } from '../types';
 import { SPECIALTIES, DOCTORS } from '../data/hospitalData';
 import { 
   ShieldCheck, 
@@ -43,8 +48,49 @@ import {
   Eye, 
   ChevronRight,
   Printer,
-  Sparkles
+  Sparkles,
+  Image as ImageIcon,
+  Upload,
+  FolderPlus,
+  Maximize2,
+  EyeOff,
+  SlidersHorizontal
 } from 'lucide-react';
+
+/**
+ * Helper to compress and convert file to optimized base64 for Firestore cross-device persistence
+ */
+function compressImageFile(file: File, maxWidth = 1200, quality = 0.85): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(e.target?.result as string);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL('image/jpeg', quality);
+        resolve(dataUrl);
+      };
+      img.onerror = () => reject(new Error('Failed to load image for compression'));
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = (err) => reject(err);
+    reader.readAsDataURL(file);
+  });
+}
 
 export const AdminPage: React.FC = () => {
   const { admin, isAuthenticated, login, logout } = useAdminAuth();
@@ -57,12 +103,30 @@ export const AdminPage: React.FC = () => {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   // Tab State
-  const [activeTab, setActiveTab] = useState<'appointments' | 'blogs' | 'overview'>('appointments');
+  const [activeTab, setActiveTab] = useState<'appointments' | 'blogs' | 'gallery' | 'overview'>('appointments');
 
   // Real-time Data
   const [appointments, setAppointments] = useState<StoredAppointment[]>([]);
   const [blogs, setBlogs] = useState<StoredBlogPost[]>([]);
+  const [galleryItems, setGalleryItems] = useState<StoredGalleryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Gallery Management State
+  const [gallerySearch, setGallerySearch] = useState('');
+  const [galleryCategoryFilter, setGalleryCategoryFilter] = useState<string>('all');
+  const [showGalleryModal, setShowGalleryModal] = useState(false);
+  const [editingGalleryId, setEditingGalleryId] = useState<string | null>(null);
+  const [uploadMethod, setUploadMethod] = useState<'file' | 'url'>('file');
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [selectedGalleryLightbox, setSelectedGalleryLightbox] = useState<StoredGalleryItem | null>(null);
+  const [galleryForm, setGalleryForm] = useState({
+    title: '',
+    category: 'Infrastructure & Building',
+    customCategory: '',
+    image: '',
+    description: '',
+    isPublished: true,
+  });
 
   // Appointment Filters
   const [appointmentSearch, setAppointmentSearch] = useState('');
@@ -110,8 +174,9 @@ export const AdminPage: React.FC = () => {
   // Initialize Firestore listeners
   useEffect(() => {
     setIsLoading(true);
-    // Seed initial sample blogs if none exist
+    // Seed initial sample blogs and gallery if none exist
     seedInitialBlogs();
+    seedInitialGallery();
 
     const unsubAppointments = subscribeToAppointments((data) => {
       setAppointments(data);
@@ -123,9 +188,15 @@ export const AdminPage: React.FC = () => {
       setIsLoading(false);
     });
 
+    const unsubGallery = subscribeToGalleryItems((data) => {
+      setGalleryItems(data);
+      setIsLoading(false);
+    });
+
     return () => {
       unsubAppointments();
       unsubBlogs();
+      unsubGallery();
     };
   }, []);
 
@@ -290,6 +361,114 @@ export const AdminPage: React.FC = () => {
       showNotification('Blog post deleted.');
     }
   };
+
+  // -------------------------------------------------------------------------
+  // GALLERY HANDLERS
+  // -------------------------------------------------------------------------
+  const handleOpenNewGallery = () => {
+    setEditingGalleryId(null);
+    setUploadMethod('file');
+    setGalleryForm({
+      title: '',
+      category: 'Infrastructure & Building',
+      customCategory: '',
+      image: '',
+      description: '',
+      isPublished: true,
+    });
+    setShowGalleryModal(true);
+  };
+
+  const handleEditGallery = (item: StoredGalleryItem) => {
+    setEditingGalleryId(item.id);
+    setUploadMethod(item.image.startsWith('data:') ? 'file' : 'url');
+    setGalleryForm({
+      title: item.title,
+      category: item.category,
+      customCategory: '',
+      image: item.image,
+      description: item.description || '',
+      isPublished: item.isPublished !== false,
+    });
+    setShowGalleryModal(true);
+  };
+
+  const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    const file = files[0];
+    try {
+      setIsUploadingImage(true);
+      const compressed = await compressImageFile(file, 1200, 0.85);
+      setGalleryForm(prev => ({ ...prev, image: compressed }));
+      setIsUploadingImage(false);
+      showNotification('Image processed and ready to save!');
+    } catch (err) {
+      console.error('Error processing image:', err);
+      setIsUploadingImage(false);
+      alert('Could not process image file. Please try another image.');
+    }
+  };
+
+  const handleSaveGallery = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!galleryForm.image) {
+      alert('Please upload or provide an image for the gallery item.');
+      return;
+    }
+
+    const finalCategory = galleryForm.category === 'custom' && galleryForm.customCategory.trim()
+      ? galleryForm.customCategory.trim()
+      : galleryForm.category;
+
+    if (editingGalleryId) {
+      await updateGalleryItem(editingGalleryId, {
+        title: galleryForm.title,
+        category: finalCategory,
+        image: galleryForm.image,
+        description: galleryForm.description,
+        isPublished: galleryForm.isPublished,
+      });
+      showNotification('Gallery item updated in real-time on all devices!');
+    } else {
+      await createGalleryItem({
+        title: galleryForm.title,
+        category: finalCategory,
+        image: galleryForm.image,
+        description: galleryForm.description,
+        uploadedBy: admin?.name || 'Hospital Admin',
+        isPublished: galleryForm.isPublished,
+        order: galleryItems.length + 1,
+      });
+      showNotification('New photo uploaded to gallery & synced to all devices!');
+    }
+    setShowGalleryModal(false);
+  };
+
+  const handleDeleteGallery = async (id: string) => {
+    if (window.confirm('Are you sure you want to delete this photo from the hospital gallery? It will be removed across all devices.')) {
+      await deleteGalleryItem(id);
+      showNotification('Photo deleted from gallery.');
+    }
+  };
+
+  const handleTogglePublishGallery = async (item: StoredGalleryItem) => {
+    const nextState = !(item.isPublished !== false);
+    await updateGalleryItem(item.id, { isPublished: nextState });
+    showNotification(nextState ? 'Photo is now published on website.' : 'Photo hidden from public gallery.');
+  };
+
+  // Filtered Gallery Items
+  const filteredGalleryItems = galleryItems.filter((item) => {
+    const matchesSearch = 
+      item.title.toLowerCase().includes(gallerySearch.toLowerCase()) ||
+      item.category.toLowerCase().includes(gallerySearch.toLowerCase()) ||
+      (item.description && item.description.toLowerCase().includes(gallerySearch.toLowerCase()));
+    
+    if (!matchesSearch) return false;
+    if (galleryCategoryFilter === 'all') return true;
+    return item.category.toLowerCase().includes(galleryCategoryFilter.toLowerCase());
+  });
 
   // Filtered Appointments
   const filteredAppointments = appointments.filter((app) => {
@@ -510,6 +689,21 @@ export const AdminPage: React.FC = () => {
             </button>
 
             <button
+              onClick={() => setActiveTab('gallery')}
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center space-x-2 ${
+                activeTab === 'gallery'
+                  ? 'bg-[#0052CC] text-white shadow-md'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+              }`}
+            >
+              <ImageIcon className="w-4 h-4" />
+              <span>Hospital Gallery</span>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] ${activeTab === 'gallery' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-800'}`}>
+                {galleryItems.length}
+              </span>
+            </button>
+
+            <button
               onClick={() => setActiveTab('overview')}
               className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center space-x-2 ${
                 activeTab === 'overview'
@@ -541,6 +735,16 @@ export const AdminPage: React.FC = () => {
               >
                 <Plus className="w-4 h-4" />
                 <span>+ Create New Article</span>
+              </button>
+            )}
+
+            {activeTab === 'gallery' && (
+              <button
+                onClick={handleOpenNewGallery}
+                className="px-4 py-2.5 bg-gradient-to-r from-[#0052CC] to-[#003D99] hover:from-[#0047B3] hover:to-[#003380] text-white text-xs font-bold rounded-xl shadow transition-all flex items-center space-x-1.5"
+              >
+                <Upload className="w-4 h-4" />
+                <span>+ Upload New Photo</span>
               </button>
             )}
           </div>
@@ -889,7 +1093,239 @@ export const AdminPage: React.FC = () => {
         )}
 
         {/* ----------------------------------------------------------------- */}
-        {/* TAB 3: SYSTEM & DATABASE SYNC */}
+        {/* TAB 3: HOSPITAL GALLERY MANAGEMENT (ALL DEVICES PERSISTENCE) */}
+        {/* ----------------------------------------------------------------- */}
+        {activeTab === 'gallery' && (
+          <div className="space-y-6">
+            
+            {/* Gallery Stats Header */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+                <div>
+                  <span className="text-[11px] font-bold uppercase text-slate-400">Total Media</span>
+                  <h3 className="text-2xl font-black text-slate-900 mt-0.5">{galleryItems.length}</h3>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#0052CC] flex items-center justify-center font-bold">
+                  <ImageIcon className="w-5 h-5" />
+                </div>
+              </div>
+
+              <div className="bg-white p-4 rounded-2xl border border-emerald-200 shadow-sm flex items-center justify-between">
+                <div>
+                  <span className="text-[11px] font-bold uppercase text-emerald-600">Published Live</span>
+                  <h3 className="text-2xl font-black text-emerald-700 mt-0.5">
+                    {galleryItems.filter(i => i.isPublished !== false).length}
+                  </h3>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+                  <CheckCircle2 className="w-5 h-5" />
+                </div>
+              </div>
+
+              <div className="bg-white p-4 rounded-2xl border border-rose-200 shadow-sm flex items-center justify-between">
+                <div>
+                  <span className="text-[11px] font-bold uppercase text-rose-600">Cath Lab & OT</span>
+                  <h3 className="text-2xl font-black text-rose-700 mt-0.5">
+                    {galleryItems.filter(i => i.category.toLowerCase().includes('cath') || i.category.toLowerCase().includes('ot') || i.category.toLowerCase().includes('theatre')).length}
+                  </h3>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+              </div>
+
+              <div className="bg-white p-4 rounded-2xl border border-purple-200 shadow-sm flex items-center justify-between">
+                <div>
+                  <span className="text-[11px] font-bold uppercase text-purple-600">Camps & Events</span>
+                  <h3 className="text-2xl font-black text-purple-700 mt-0.5">
+                    {galleryItems.filter(i => i.category.toLowerCase().includes('event') || i.category.toLowerCase().includes('camp')).length}
+                  </h3>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
+                  <FolderPlus className="w-5 h-5" />
+                </div>
+              </div>
+            </div>
+
+            {/* Filter & Search Bar */}
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
+              
+              <div className="relative w-full md:w-80">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                <input
+                  type="text"
+                  value={gallerySearch}
+                  onChange={(e) => setGallerySearch(e.target.value)}
+                  placeholder="Search photo by title, category, description..."
+                  className="w-full pl-9 pr-3 py-2 text-xs border border-slate-300 rounded-xl bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0052CC]"
+                />
+              </div>
+
+              {/* Category Filter Chips */}
+              <div className="flex items-center space-x-1.5 overflow-x-auto w-full md:w-auto scrollbar-none">
+                {[
+                  { id: 'all', label: 'All Photos' },
+                  { id: 'infrastructure', label: 'Infrastructure' },
+                  { id: 'cathlab', label: 'Cath Lab & ICU' },
+                  { id: 'ot', label: 'Operation Theaters' },
+                  { id: 'dialysis', label: 'Dialysis' },
+                  { id: 'event', label: 'Camps & Events' }
+                ].map((cat) => (
+                  <button
+                    key={cat.id}
+                    onClick={() => setGalleryCategoryFilter(cat.id)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${
+                      galleryCategoryFilter === cat.id
+                        ? 'bg-[#0052CC] text-white shadow-sm'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    {cat.label}
+                  </button>
+                ))}
+              </div>
+
+            </div>
+
+            {/* Cloud Sync Notice */}
+            <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+              <div className="flex items-center space-x-2 text-blue-950 font-medium">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span><strong>Cross-Device Persistence:</strong> Uploaded images are permanently saved in cloud database and instantly synchronized across all mobile phones, tablets, reception computers, and user browsers.</span>
+              </div>
+              <button
+                onClick={handleOpenNewGallery}
+                className="px-3.5 py-1.5 bg-[#0052CC] hover:bg-[#003D99] text-white font-bold rounded-xl whitespace-nowrap flex items-center justify-center space-x-1 shadow-sm"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                <span>Upload Photo</span>
+              </button>
+            </div>
+
+            {/* Gallery Cards Grid */}
+            {filteredGalleryItems.length === 0 ? (
+              <div className="bg-white rounded-2xl p-12 border border-slate-200 text-center space-y-3">
+                <ImageIcon className="w-12 h-12 text-slate-300 mx-auto" />
+                <h3 className="text-base font-bold text-slate-700">No photos found</h3>
+                <p className="text-xs text-slate-500">No gallery media matches the current filter.</p>
+                <button
+                  onClick={handleOpenNewGallery}
+                  className="px-4 py-2 bg-[#0052CC] text-white text-xs font-bold rounded-xl shadow inline-flex items-center space-x-1.5"
+                >
+                  <Upload className="w-4 h-4" />
+                  <span>Upload First Photo</span>
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredGalleryItems.map((item) => (
+                  <div
+                    key={item.id}
+                    className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between"
+                  >
+                    <div>
+                      {/* Image Preview Header */}
+                      <div className="relative aspect-video bg-slate-900 group">
+                        <img
+                          src={item.image}
+                          alt={item.title}
+                          referrerPolicy="no-referrer"
+                          className="w-full h-full object-cover"
+                        />
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center space-x-2">
+                          <button
+                            onClick={() => setSelectedGalleryLightbox(item)}
+                            className="p-2 bg-white/90 text-slate-900 rounded-full hover:bg-white shadow"
+                            title="Preview Full Size"
+                          >
+                            <Maximize2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                        
+                        {/* Badges */}
+                        <div className="absolute top-2.5 left-2.5 flex items-center space-x-1.5">
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-900/80 text-white backdrop-blur-sm">
+                            {item.category}
+                          </span>
+                        </div>
+
+                        <div className="absolute top-2.5 right-2.5">
+                          {item.isPublished !== false ? (
+                            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-600 text-white flex items-center space-x-1 shadow-sm">
+                              <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
+                              <span>Published</span>
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-600 text-white flex items-center space-x-1 shadow-sm">
+                              <span>Draft / Hidden</span>
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Content */}
+                      <div className="p-4 space-y-1.5">
+                        <h4 className="text-sm font-bold text-slate-900 line-clamp-1">{item.title}</h4>
+                        {item.description ? (
+                          <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed">{item.description}</p>
+                        ) : (
+                          <p className="text-xs text-slate-400 italic">No description provided</p>
+                        )}
+                        <span className="text-[10px] text-slate-400 block pt-1 font-medium">
+                          Uploaded: {new Date(item.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Footer Actions */}
+                    <div className="p-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+                      <button
+                        onClick={() => handleTogglePublishGallery(item)}
+                        className={`text-xs font-bold flex items-center space-x-1 transition-colors ${
+                          item.isPublished !== false ? 'text-amber-600 hover:text-amber-700' : 'text-emerald-600 hover:text-emerald-700'
+                        }`}
+                        title={item.isPublished !== false ? 'Hide from public website' : 'Publish to public website'}
+                      >
+                        {item.isPublished !== false ? (
+                          <>
+                            <EyeOff className="w-3.5 h-3.5" />
+                            <span>Hide</span>
+                          </>
+                        ) : (
+                          <>
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>Publish</span>
+                          </>
+                        )}
+                      </button>
+
+                      <div className="flex items-center space-x-1.5">
+                        <button
+                          onClick={() => handleEditGallery(item)}
+                          className="p-1.5 bg-white hover:bg-blue-50 text-[#0052CC] rounded-lg border border-slate-200 transition-colors"
+                          title="Edit Photo Details"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteGallery(item.id)}
+                          className="p-1.5 bg-white hover:bg-rose-50 text-rose-600 rounded-lg border border-slate-200 transition-colors"
+                          title="Delete Photo"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+          </div>
+        )}
+
+        {/* ----------------------------------------------------------------- */}
+        {/* TAB 4: SYSTEM & DATABASE SYNC */}
         {/* ----------------------------------------------------------------- */}
         {activeTab === 'overview' && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1409,6 +1845,294 @@ export const AdminPage: React.FC = () => {
               </div>
             </form>
 
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------------- */}
+      {/* MODAL: GALLERY UPLOAD & EDIT MODAL (STORED ON ALL DEVICES) */}
+      {/* ------------------------------------------------------------------- */}
+      {showGalleryModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
+            
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-5">
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#0052CC] bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200">
+                  Cloud Persistence Sync
+                </span>
+                <h3 className="text-xl font-black text-slate-900 mt-1">
+                  {editingGalleryId ? 'Edit Gallery Photo' : 'Upload Hospital Photo'}
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Photos uploaded here will instantly be stored in Firestore and visible on all devices.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowGalleryModal(false)}
+                className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-700"
+              >
+                <XCircle className="w-6 h-6" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveGallery} className="space-y-4 text-xs">
+              
+              {/* Image Source Selection */}
+              <div>
+                <label className="block font-bold text-slate-700 mb-1.5">Image Source Method</label>
+                <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => setUploadMethod('file')}
+                    className={`py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center space-x-1.5 ${
+                      uploadMethod === 'file' ? 'bg-white text-[#0052CC] shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Upload Image File</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setUploadMethod('url')}
+                    className={`py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center space-x-1.5 ${
+                      uploadMethod === 'url' ? 'bg-white text-[#0052CC] shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Direct Image URL</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Upload file zone */}
+              {uploadMethod === 'file' ? (
+                <div className="space-y-2">
+                  <label className="block font-bold text-slate-700">Select Image from Device *</label>
+                  
+                  {galleryForm.image ? (
+                    <div className="relative rounded-2xl border border-slate-200 overflow-hidden bg-slate-950">
+                      <img
+                        src={galleryForm.image}
+                        alt="Preview"
+                        className="w-full h-48 object-cover opacity-90"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent flex items-end justify-between p-4">
+                        <span className="text-white text-xs font-medium flex items-center space-x-1.5">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                          <span>Image ready for cross-device sync</span>
+                        </span>
+                        <label className="px-3 py-1.5 bg-white/90 hover:bg-white text-slate-900 text-xs font-bold rounded-xl cursor-pointer transition-colors shadow">
+                          Replace File
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleImageFileChange}
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  ) : (
+                    <label className="border-2 border-dashed border-slate-300 hover:border-[#0052CC] bg-slate-50 hover:bg-blue-50/50 rounded-2xl p-8 flex flex-col items-center justify-center cursor-pointer transition-all">
+                      {isUploadingImage ? (
+                        <div className="flex flex-col items-center space-y-2">
+                          <div className="w-7 h-7 border-3 border-[#0052CC] border-t-transparent rounded-full animate-spin"></div>
+                          <span className="text-xs font-bold text-[#0052CC]">Optimizing image for cross-device storage...</span>
+                        </div>
+                      ) : (
+                        <div className="text-center space-y-2">
+                          <div className="w-12 h-12 mx-auto rounded-2xl bg-blue-100/80 text-[#0052CC] flex items-center justify-center">
+                            <Upload className="w-6 h-6" />
+                          </div>
+                          <div>
+                            <span className="font-bold text-slate-800 text-xs block">
+                              Click to choose a photo or drag & drop here
+                            </span>
+                            <span className="text-[11px] text-slate-500 block mt-0.5">
+                              Supports JPG, PNG, WEBP. Automatically optimized for fast mobile loading.
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleImageFileChange}
+                        className="hidden"
+                      />
+                    </label>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <label className="block font-bold text-slate-700">Image Web URL *</label>
+                  <input
+                    type="url"
+                    value={galleryForm.image}
+                    onChange={(e) => setGalleryForm({ ...galleryForm, image: e.target.value })}
+                    placeholder="https://images.unsplash.com/... or hospital image URL"
+                    className="w-full p-2.5 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white focus:outline-none"
+                  />
+
+                  {/* Preset Suggestions */}
+                  <div className="pt-1">
+                    <span className="text-[10px] text-slate-400 font-bold uppercase block mb-1">Quick Clinical Presets:</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[
+                        { label: 'Philips Cath Lab', url: 'https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&w=1200&q=80' },
+                        { label: 'Modular OT', url: 'https://images.unsplash.com/photo-1579684385127-1ef15d508118?auto=format&fit=crop&w=1200&q=80' },
+                        { label: 'Dialysis Center', url: 'https://images.unsplash.com/photo-1584515979956-d9f6e5d09982?auto=format&fit=crop&w=1200&q=80' },
+                        { label: 'Free Health Camp', url: 'https://images.unsplash.com/photo-1576091160550-2173dba999ef?auto=format&fit=crop&w=1200&q=80' },
+                        { label: 'Critical ICU', url: 'https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&w=1200&q=80' }
+                      ].map((pre, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => setGalleryForm({ ...galleryForm, image: pre.url, title: galleryForm.title || pre.label })}
+                          className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[10px] font-bold"
+                        >
+                          + {pre.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {galleryForm.image && (
+                    <div className="mt-2 rounded-xl overflow-hidden border border-slate-200 aspect-video max-h-40 bg-slate-900">
+                      <img src={galleryForm.image} alt="Preview" className="w-full h-full object-cover" />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Title */}
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Photo Title / Facility Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={galleryForm.title}
+                  onChange={(e) => setGalleryForm({ ...galleryForm, title: e.target.value })}
+                  placeholder="e.g. Advanced Flat-Panel Digital Cath Lab Suite"
+                  className="w-full p-2.5 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white focus:outline-none"
+                />
+              </div>
+
+              {/* Category */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Category *</label>
+                  <select
+                    value={galleryForm.category}
+                    onChange={(e) => setGalleryForm({ ...galleryForm, category: e.target.value })}
+                    className="w-full p-2.5 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white focus:outline-none"
+                  >
+                    <option value="Infrastructure & Building">Infrastructure & Building</option>
+                    <option value="Cath Lab & ICU">Cath Lab & ICU</option>
+                    <option value="Operation Theaters">Operation Theaters</option>
+                    <option value="Dialysis Center">Dialysis Center</option>
+                    <option value="Medical Camps & Events">Medical Camps & Events</option>
+                    <option value="Diagnostics & Lab">Diagnostics & Pathology</option>
+                    <option value="Patient Suites & Rooms">Patient Suites & Rooms</option>
+                    <option value="custom">Custom Category...</option>
+                  </select>
+                </div>
+
+                {galleryForm.category === 'custom' ? (
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Custom Category Name *</label>
+                    <input
+                      type="text"
+                      required
+                      value={galleryForm.customCategory}
+                      onChange={(e) => setGalleryForm({ ...galleryForm, customCategory: e.target.value })}
+                      placeholder="e.g. Cardiac Rehab Wing"
+                      className="w-full p-2.5 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white focus:outline-none"
+                    />
+                  </div>
+                ) : (
+                  <div className="flex items-center space-x-2 pt-6">
+                    <input
+                      type="checkbox"
+                      id="galleryPublished"
+                      checked={galleryForm.isPublished}
+                      onChange={(e) => setGalleryForm({ ...galleryForm, isPublished: e.target.checked })}
+                      className="w-4 h-4 text-[#0052CC] rounded focus:ring-blue-500"
+                    />
+                    <label htmlFor="galleryPublished" className="font-bold text-slate-800">
+                      Publish immediately on public gallery
+                    </label>
+                  </div>
+                )}
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Caption / Clinical Description</label>
+                <textarea
+                  rows={3}
+                  value={galleryForm.description}
+                  onChange={(e) => setGalleryForm({ ...galleryForm, description: e.target.value })}
+                  placeholder="e.g. Equipped with 24x7 hemodynamic monitors, emergency defibrillators, and sterile airflow systems for coronary interventions..."
+                  className="w-full p-2.5 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white focus:outline-none"
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div className="pt-4 border-t border-slate-100 flex justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={() => setShowGalleryModal(false)}
+                  className="px-4 py-2.5 bg-slate-100 text-slate-700 rounded-xl font-bold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!galleryForm.image}
+                  className="px-6 py-2.5 bg-gradient-to-r from-[#0052CC] to-[#003D99] hover:from-[#0047B3] hover:to-[#003380] text-white rounded-xl font-bold shadow disabled:opacity-50 flex items-center space-x-1.5"
+                >
+                  <Upload className="w-4 h-4" />
+                  <span>{editingGalleryId ? 'Save Changes' : 'Upload & Store on All Devices'}</span>
+                </button>
+              </div>
+
+            </form>
+
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------------- */}
+      {/* MODAL: FULLSCREEN LIGHTBOX PREVIEW */}
+      {/* ------------------------------------------------------------------- */}
+      {selectedGalleryLightbox && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md animate-in fade-in duration-150">
+          <div className="relative max-w-4xl w-full bg-slate-900 rounded-3xl overflow-hidden shadow-2xl border border-slate-800">
+            <button
+              onClick={() => setSelectedGalleryLightbox(null)}
+              className="absolute top-4 right-4 z-10 w-9 h-9 rounded-full bg-black/60 hover:bg-black text-white flex items-center justify-center transition-colors"
+            >
+              <XCircle className="w-6 h-6" />
+            </button>
+            <div className="max-h-[70vh] overflow-hidden bg-black flex items-center justify-center">
+              <img
+                src={selectedGalleryLightbox.image}
+                alt={selectedGalleryLightbox.title}
+                referrerPolicy="no-referrer"
+                className="max-h-[70vh] w-auto object-contain"
+              />
+            </div>
+            <div className="p-6 bg-slate-900 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <span className="text-xs font-bold uppercase text-rose-400">{selectedGalleryLightbox.category}</span>
+                <h4 className="text-lg font-bold mt-0.5">{selectedGalleryLightbox.title}</h4>
+                {selectedGalleryLightbox.description && (
+                  <p className="text-xs text-slate-300 mt-1">{selectedGalleryLightbox.description}</p>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}

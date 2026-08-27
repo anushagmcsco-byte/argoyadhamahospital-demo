@@ -11,6 +11,11 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // Allow public read for gallery items, write for staff/admin to sync across all devices
+    match /galleryItems/{galleryId} {
+      allow read, write: if true;
+    }
+
     // Admins collection for role management
     match /admins/{adminId} {
       allow read, write: if true;

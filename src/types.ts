@@ -141,6 +141,19 @@ export interface StoredBlogPost extends BlogPost {
   updatedAt?: string;
 }
 
+export interface StoredGalleryItem {
+  id: string;
+  title: string;
+  category: string;
+  image: string;
+  description?: string;
+  uploadedBy?: string;
+  isPublished?: boolean;
+  order?: number;
+  createdAt: string;
+  updatedAt?: string;
+}
+
 export interface AdminUser {
   email: string;
   name: string;

@@ -14,11 +14,12 @@ import {
   serverTimestamp 
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { StoredAppointment, StoredBlogPost } from '../types';
-import { BLOG_POSTS } from '../data/hospitalData';
+import { StoredAppointment, StoredBlogPost, StoredGalleryItem } from '../types';
+import { BLOG_POSTS, GALLERY_IMAGES } from '../data/hospitalData';
 
 const APPOINTMENTS_COLLECTION = 'appointments';
 const BLOGS_COLLECTION = 'blogPosts';
+const GALLERY_COLLECTION = 'galleryItems';
 
 // ---------------------------------------------------------------------------
 // APPOINTMENTS SERVICE
@@ -310,3 +311,177 @@ export async function deleteBlogPost(id: string): Promise<boolean> {
     return false;
   }
 }
+
+// ---------------------------------------------------------------------------
+// GALLERY SERVICE (CROSS-DEVICE PERSISTENCE)
+// ---------------------------------------------------------------------------
+
+/**
+ * Seed initial default gallery items to Firestore if collection is empty
+ */
+export async function seedInitialGallery(): Promise<void> {
+  try {
+    const snap = await getDocs(collection(db, GALLERY_COLLECTION));
+    if (snap.empty) {
+      console.log('Seeding initial hospital gallery photos to Firestore...');
+      let orderIndex = 0;
+      for (const item of GALLERY_IMAGES) {
+        orderIndex++;
+        await addDoc(collection(db, GALLERY_COLLECTION), {
+          title: item.title,
+          category: item.category,
+          image: item.image,
+          description: item.description || '',
+          uploadedBy: 'Hospital Media Team',
+          isPublished: true,
+          order: orderIndex,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+      }
+    }
+  } catch (err) {
+    console.warn('Could not seed initial gallery items to Firestore:', err);
+  }
+}
+
+/**
+ * Real-time listener for gallery items across all devices
+ */
+export function subscribeToGalleryItems(callback: (items: StoredGalleryItem[]) => void) {
+  try {
+    const q = query(collection(db, GALLERY_COLLECTION), orderBy('createdAt', 'desc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      if (snapshot.empty) {
+        // Fallback to static gallery list if Firestore is empty
+        const fallback = GALLERY_IMAGES.map((img, idx) => ({
+          id: img.id || `g-${idx + 1}`,
+          title: img.title,
+          category: img.category,
+          image: img.image,
+          description: img.description || '',
+          uploadedBy: 'Hospital Media Team',
+          isPublished: true,
+          order: idx + 1,
+          createdAt: new Date().toISOString(),
+        }));
+        callback(fallback);
+        return;
+      }
+
+      const items: StoredGalleryItem[] = [];
+      snapshot.forEach((doc) => {
+        const d = doc.data();
+        items.push({
+          id: doc.id,
+          title: d.title || 'Untitled Photo',
+          category: d.category || 'Infrastructure',
+          image: d.image || '',
+          description: d.description || '',
+          uploadedBy: d.uploadedBy || 'Admin',
+          isPublished: d.isPublished !== false,
+          order: d.order || 0,
+          createdAt: d.createdAt || new Date().toISOString(),
+          updatedAt: d.updatedAt || '',
+        });
+      });
+      callback(items);
+    }, (error) => {
+      console.warn('Firestore gallery subscription error, falling back to local/static:', error);
+      const fallback = GALLERY_IMAGES.map((img, idx) => ({
+        id: img.id || `g-${idx + 1}`,
+        title: img.title,
+        category: img.category,
+        image: img.image,
+        description: img.description || '',
+        uploadedBy: 'Hospital Media Team',
+        isPublished: true,
+        order: idx + 1,
+        createdAt: new Date().toISOString(),
+      }));
+      callback(fallback);
+    });
+
+    return unsubscribe;
+  } catch (err) {
+    console.warn('Firestore gallery listener setup failed:', err);
+    const fallback = GALLERY_IMAGES.map((img, idx) => ({
+      id: img.id || `g-${idx + 1}`,
+      title: img.title,
+      category: img.category,
+      image: img.image,
+      description: img.description || '',
+      uploadedBy: 'Hospital Media Team',
+      isPublished: true,
+      order: idx + 1,
+      createdAt: new Date().toISOString(),
+    }));
+    callback(fallback);
+    return () => {};
+  }
+}
+
+/**
+ * Create a new Gallery Item in Firestore
+ */
+export async function createGalleryItem(item: Omit<StoredGalleryItem, 'id' | 'createdAt'> & { createdAt?: string }): Promise<StoredGalleryItem> {
+  const newItem: StoredGalleryItem = {
+    ...item,
+    id: '',
+    isPublished: item.isPublished !== false,
+    createdAt: item.createdAt || new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+
+  try {
+    const colRef = collection(db, GALLERY_COLLECTION);
+    const docRef = await addDoc(colRef, {
+      title: newItem.title,
+      category: newItem.category,
+      image: newItem.image,
+      description: newItem.description || '',
+      uploadedBy: newItem.uploadedBy || 'Admin',
+      isPublished: newItem.isPublished,
+      order: newItem.order || 0,
+      createdAt: newItem.createdAt,
+      updatedAt: newItem.updatedAt,
+    });
+    return { ...newItem, id: docRef.id };
+  } catch (error) {
+    console.error('Error saving gallery item to Firestore:', error);
+    const localId = 'gallery-local-' + Date.now();
+    return { ...newItem, id: localId };
+  }
+}
+
+/**
+ * Update an existing Gallery Item (Admin)
+ */
+export async function updateGalleryItem(id: string, item: Partial<StoredGalleryItem>): Promise<boolean> {
+  try {
+    const docRef = doc(db, GALLERY_COLLECTION, id);
+    await updateDoc(docRef, {
+      ...item,
+      updatedAt: new Date().toISOString(),
+    });
+    return true;
+  } catch (error) {
+    console.error('Error updating gallery item in Firestore:', error);
+    return false;
+  }
+}
+
+/**
+ * Delete a Gallery Item (Admin)
+ */
+export async function deleteGalleryItem(id: string): Promise<boolean> {
+  try {
+    const docRef = doc(db, GALLERY_COLLECTION, id);
+    await deleteDoc(docRef);
+    return true;
+  } catch (error) {
+    console.error('Error deleting gallery item in Firestore:', error);
+    return false;
+  }
+}
+

@@ -50,6 +50,24 @@
       },
       "required": ["slug", "title", "excerpt", "content", "category", "authorName", "createdAt"]
     },
+    "galleryItems": {
+      "title": "Hospital Gallery Media",
+      "description": "Hospital infrastructure, department photos, medical camps, and facility gallery items",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "category": { "type": "string" },
+        "image": { "type": "string" },
+        "description": { "type": "string" },
+        "uploadedBy": { "type": "string" },
+        "isPublished": { "type": "boolean" },
+        "order": { "type": "number" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["title", "category", "image", "createdAt"]
+    },
     "admins": {
       "title": "Hospital Administrators",
       "description": "Authorized staff credentials and roles",
@@ -72,6 +90,12 @@
       "delete": "true"
     },
     "blogPosts": {
+      "read": "true",
+      "create": "true",
+      "update": "true",
+      "delete": "true"
+    },
+    "galleryItems": {
       "read": "true",
       "create": "true",
       "update": "true",
